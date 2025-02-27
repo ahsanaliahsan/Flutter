@@ -1,0 +1,14 @@
+{
+    "configurations": [
+        {
+            "name": "Flutter",
+            "request": "launch",
+            "type": "dart",
+            "program": "lib/main.dart",
+            "args": [
+                "--dart-define",
+                "pk.eyJ1IjoiZWFnZXJwayIsImEiOiJjbTduampmcDEwMW0wMmtzMno1aTBoa2JrIn0.ChS7s_tBEgceQ_pJ5MoCOA"
+            ],
+        }
+    ]
+}
