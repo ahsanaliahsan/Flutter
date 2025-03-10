@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
@@ -33,9 +34,25 @@ class _PlacesAutocompleteScreenState extends State<PlacesAutocompleteScreen> {
   LatLng? selectedLocation;
   LatLng? cityCoordinates;
   GoogleMapController? mapController;
+  BitmapDescriptor? customMarkerIcon;
 
   final List<String> cities = ['Islamabad', 'Lahore', 'Rawalpindi', 'Karachi'];
   final List<String> countries = ['Pakistan'];
+
+  @override
+  void initState() {
+    super.initState();
+    fetchCityCoordinates(selectedCity);
+    _loadCustomMarkerIcon();
+  }
+
+  Future<void> _loadCustomMarkerIcon() async {
+    // Load a custom marker icon from assets
+    customMarkerIcon = await BitmapDescriptor.fromAssetImage(
+      const ImageConfiguration(size: Size(48, 48)), // Adjust size here
+      'assets/home_location_marker.png', // Path to your custom marker image
+    );
+  }
 
   Future<void> fetchCityCoordinates(String city) async {
     final String url =
@@ -115,12 +132,6 @@ class _PlacesAutocompleteScreenState extends State<PlacesAutocompleteScreen> {
         });
       }
     }
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    fetchCityCoordinates(selectedCity);
   }
 
   @override
@@ -232,6 +243,12 @@ class _PlacesAutocompleteScreenState extends State<PlacesAutocompleteScreen> {
                               getAddressFromLatLng(newPosition);
                             });
                           },
+                          icon:
+                              customMarkerIcon ?? // Use custom icon if available
+                                  BitmapDescriptor.defaultMarkerWithHue(
+                                    BitmapDescriptor
+                                        .hueRed, // Default red color
+                                  ),
                         )
                       }
                     : {},
