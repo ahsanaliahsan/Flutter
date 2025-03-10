@@ -24,12 +24,11 @@ class PlacesAutocompleteScreen extends StatefulWidget {
 }
 
 class _PlacesAutocompleteScreenState extends State<PlacesAutocompleteScreen> {
-  final String apiKey =
-      "AIzaSyCg_GnIlgd4l_04zo6_NJ1AYyHucQgcNP0"; // Replace with your API key
-  final TextEditingController _controller = TextEditingController();
+  final String apiKey = "YOUR_API_KEY"; // Replace with your API key
+  final TextEditingController _autocompleteController = TextEditingController();
+  final TextEditingController _addressController = TextEditingController();
   String selectedCity = 'Islamabad';
   String selectedCountry = 'Pakistan';
-  final FocusNode _focusNode = FocusNode();
   LatLng? selectedLocation;
   LatLng? cityCoordinates;
   GoogleMapController? mapController;
@@ -37,7 +36,6 @@ class _PlacesAutocompleteScreenState extends State<PlacesAutocompleteScreen> {
   final List<String> cities = ['Islamabad', 'Lahore', 'Rawalpindi', 'Karachi'];
   final List<String> countries = ['Pakistan'];
 
-  // Fetch coordinates for the selected city
   Future<void> fetchCityCoordinates(String city) async {
     final String url =
         "https://maps.googleapis.com/maps/api/geocode/json?address=$city,$selectedCountry&key=$apiKey";
@@ -51,12 +49,9 @@ class _PlacesAutocompleteScreenState extends State<PlacesAutocompleteScreen> {
           cityCoordinates = LatLng(location['lat'], location['lng']);
         });
       }
-    } else {
-      print("Error fetching city coordinates: ${response.body}");
     }
   }
 
-  // Fetch autocomplete suggestions based on input, city, and country
   Future<List<String>> fetchSuggestions(String input) async {
     if (cityCoordinates == null) {
       await fetchCityCoordinates(selectedCity);
@@ -79,8 +74,6 @@ class _PlacesAutocompleteScreenState extends State<PlacesAutocompleteScreen> {
           data['predictions'].map((prediction) => prediction['description']),
         );
       }
-    } else {
-      print("Error fetching suggestions: ${response.body}");
     }
     return [];
   }
@@ -91,25 +84,39 @@ class _PlacesAutocompleteScreenState extends State<PlacesAutocompleteScreen> {
     final response = await http.get(Uri.parse(url));
 
     if (response.statusCode == 200) {
-      final Map<String, dynamic> data = json.decode(response.body);
+      final data = json.decode(response.body);
       if (data['results'].isNotEmpty) {
         final location = data['results'][0]['geometry']['location'];
         setState(() {
           selectedLocation = LatLng(location['lat'], location['lng']);
+          _addressController.text = place;
         });
         mapController?.animateCamera(
           CameraUpdate.newLatLngZoom(selectedLocation!, 14),
         );
       }
-    } else {
-      print("Error fetching place coordinates: ${response.body}");
+    }
+  }
+
+  Future<void> getAddressFromLatLng(LatLng position) async {
+    final String url =
+        "https://maps.googleapis.com/maps/api/geocode/json?latlng=${position.latitude},${position.longitude}&key=$apiKey";
+    final response = await http.get(Uri.parse(url));
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      if (data['results'].isNotEmpty) {
+        setState(() {
+          _addressController.text = data['results'][0]['formatted_address'];
+        });
+      }
     }
   }
 
   @override
   void initState() {
     super.initState();
-    fetchCityCoordinates(selectedCity); // Fetch initial coordinates
+    fetchCityCoordinates(selectedCity);
   }
 
   @override
@@ -120,7 +127,6 @@ class _PlacesAutocompleteScreenState extends State<PlacesAutocompleteScreen> {
         padding: const EdgeInsets.all(8.0),
         child: Column(
           children: [
-            // Country Dropdown
             DropdownButtonFormField<String>(
               value: selectedCountry,
               items: countries.map((String country) {
@@ -141,8 +147,6 @@ class _PlacesAutocompleteScreenState extends State<PlacesAutocompleteScreen> {
               },
             ),
             SizedBox(height: 10),
-
-            // City Dropdown
             DropdownButtonFormField<String>(
               value: selectedCity,
               items: cities.map((String city) {
@@ -163,8 +167,6 @@ class _PlacesAutocompleteScreenState extends State<PlacesAutocompleteScreen> {
               },
             ),
             SizedBox(height: 10),
-
-            // Autocomplete TextField
             Autocomplete<String>(
               optionsBuilder: (TextEditingValue textEditingValue) async {
                 if (textEditingValue.text.length < 3) {
@@ -172,28 +174,42 @@ class _PlacesAutocompleteScreenState extends State<PlacesAutocompleteScreen> {
                 }
                 return await fetchSuggestions(textEditingValue.text);
               },
-              fieldViewBuilder: (context, textEditingController, focusNode,
-                  onFieldSubmitted) {
+              onSelected: (String selection) {
+                getPlaceCoordinates(selection);
+              },
+              fieldViewBuilder: (context, controller, focusNode, onSubmit) {
+                _autocompleteController.text = controller.text;
                 return TextField(
-                  controller: textEditingController,
+                  controller: controller,
                   focusNode: focusNode,
                   decoration: InputDecoration(
-                    labelText: 'Enter Place Name',
+                    labelText: 'Search Address',
                     border: OutlineInputBorder(),
                   ),
                 );
               },
-              onSelected: (String selection) {
-                getPlaceCoordinates(selection);
-              },
             ),
             SizedBox(height: 10),
-
-            // Google Map Display
+            TextField(
+              controller: _addressController,
+              readOnly: true,
+              decoration: InputDecoration(
+                labelText: 'Selected Address',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            SizedBox(height: 10),
             Expanded(
               child: GoogleMap(
                 onMapCreated: (GoogleMapController controller) {
                   mapController = controller;
+                },
+                onTap: (LatLng position) {
+                  setState(() {
+                    selectedLocation = position;
+                    _addressController.clear();
+                    getAddressFromLatLng(position);
+                  });
                 },
                 initialCameraPosition: CameraPosition(
                   target: cityCoordinates ?? LatLng(33.6844, 73.0479),
@@ -204,6 +220,14 @@ class _PlacesAutocompleteScreenState extends State<PlacesAutocompleteScreen> {
                         Marker(
                           markerId: MarkerId('selected-location'),
                           position: selectedLocation!,
+                          draggable: true,
+                          onDragEnd: (LatLng newPosition) {
+                            setState(() {
+                              selectedLocation = newPosition;
+                              _addressController.clear();
+                              getAddressFromLatLng(newPosition);
+                            });
+                          },
                         )
                       }
                     : {},
