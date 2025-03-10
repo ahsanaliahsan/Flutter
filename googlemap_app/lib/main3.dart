@@ -55,17 +55,12 @@ class _PlacesAutocompleteScreenState extends State<PlacesAutocompleteScreen> {
 
     if (response.statusCode == 200) {
       final Map<String, dynamic> data = json.decode(response.body);
+      print("API Response: $data"); // Debug the response
       if (data.containsKey('suggestions')) {
         setState(() {
-          // suggestions = List<String>.from(
-          //   data['suggestions'].map((suggestion) =>
-          //       suggestion['placePrediction']['text'] as String),
-          // );
           suggestions = List<String>.from(
             data['suggestions'].map((suggestion) =>
-                suggestion['placePrediction']?['structured_formatting']
-                    ?['main_text'] ??
-                ''),
+                suggestion['placePrediction']['text'] as String),
           );
         });
       } else {

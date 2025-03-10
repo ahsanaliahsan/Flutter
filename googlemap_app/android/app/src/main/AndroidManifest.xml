@@ -43,7 +43,7 @@
             <!-- Google Maps API Key meta-data -->
             <meta-data
                 android:name="com.google.android.geo.API_KEY"
-                android:value="AIzaSyC1RzjjFsw97bzmUTL6N9biapAjalztMk0" />
+                android:value="AIzaSyCg_GnIlgd4l_04zo6_NJ1AYyHucQgcNP0" />
     
     </application>
     <!-- Required to query activities that can process text, see:
