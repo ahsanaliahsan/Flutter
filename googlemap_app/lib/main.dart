@@ -24,94 +24,89 @@ class PlacesAutocompleteScreen extends StatefulWidget {
 
 class _PlacesAutocompleteScreenState extends State<PlacesAutocompleteScreen> {
   final String apiKey =
-      "AIzaSyCg_GnIlgd4l_04zo6_NJ1AYyHucQgcNP0"; // Replace with your API key
+      "AIzaSyCg_GnIlgd4l_04zo6_NJ1AYyHucQgcNP0"; // Replace with your actual API key
+  final TextEditingController _controller = TextEditingController();
+  final FocusNode _focusNode = FocusNode();
   List<String> suggestions = [];
 
-  Future<void> fetchSuggestions(String input) async {
-    final String url = "https://places.googleapis.com/v1/places:autocomplete";
+  Future<List<String>> fetchSuggestions(String input) async {
+    final String url =
+        "https://maps.googleapis.com/maps/api/place/autocomplete/json?input=$input&key=$apiKey&radius=500&location=37.76999,-122.44696";
 
-    final Map<String, dynamic> requestBody = {
-      "input": input,
-      "locationBias": {
-        "circle": {
-          "center": {
-            "latitude": 37.76999,
-            "longitude": -122.44696,
-          },
-          "radius": 500.0,
-        },
-      },
-    };
-
-    final response = await http.post(
-      Uri.parse(url),
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Goog-Api-Key': apiKey,
-        'X-Goog-FieldMask': 'suggestions.placePrediction.text',
-      },
-      body: json.encode(requestBody),
-    );
+    final response = await http.get(Uri.parse(url));
 
     if (response.statusCode == 200) {
       final Map<String, dynamic> data = json.decode(response.body);
-      if (data.containsKey('suggestions')) {
-        setState(() {
-          // suggestions = List<String>.from(
-          //   data['suggestions'].map((suggestion) =>
-          //       suggestion['placePrediction']['text'] as String),
-          // );
-          suggestions = List<String>.from(
-            data['suggestions'].map((suggestion) =>
-                suggestion['placePrediction']?['structured_formatting']
-                    ?['main_text'] ??
-                ''),
-          );
-        });
-      } else {
-        print("No suggestions found");
+      if (data.containsKey('predictions')) {
+        return List<String>.from(
+          data['predictions'].map((prediction) => prediction['description']),
+        );
       }
     } else {
       print("Error: ${response.statusCode}");
       print("Response: ${response.body}");
     }
+    return [];
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text("Places Autocomplete")),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: TextField(
+      body: Padding(
+        padding: const EdgeInsets.all(8.0),
+        child: Autocomplete<String>(
+          optionsBuilder: (TextEditingValue textEditingValue) async {
+            if (textEditingValue.text.length < 5) {
+              return const Iterable<String>.empty();
+            }
+            suggestions = await fetchSuggestions(textEditingValue.text);
+            return suggestions;
+          },
+          displayStringForOption: (String option) => option,
+          fieldViewBuilder: (BuildContext context,
+              TextEditingController textEditingController,
+              FocusNode focusNode,
+              VoidCallback onFieldSubmitted) {
+            return TextField(
+              controller: textEditingController,
+              focusNode: focusNode,
               decoration: InputDecoration(
                 labelText: 'Enter Place Name',
                 border: OutlineInputBorder(),
               ),
-              onChanged: (value) {
-                if (value.isNotEmpty) {
-                  fetchSuggestions(value);
-                } else {
-                  setState(() {
-                    suggestions = [];
-                  });
-                }
-              },
-            ),
-          ),
-          Expanded(
-            child: ListView.builder(
-              itemCount: suggestions.length,
-              itemBuilder: (context, index) {
-                return ListTile(
-                  title: Text(suggestions[index]),
-                );
-              },
-            ),
-          ),
-        ],
+            );
+          },
+          optionsViewBuilder: (BuildContext context,
+              AutocompleteOnSelected<String> onSelected,
+              Iterable<String> options) {
+            return Align(
+              alignment: Alignment.topLeft,
+              child: Material(
+                elevation: 4,
+                child: Container(
+                  width: MediaQuery.of(context).size.width - 16,
+                  child: ListView.builder(
+                    padding: EdgeInsets.zero,
+                    itemCount: options.length,
+                    itemBuilder: (BuildContext context, int index) {
+                      final String option = options.elementAt(index);
+                      return ListTile(
+                        title: Text(option),
+                        onTap: () {
+                          onSelected(option);
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ),
+            );
+          },
+          onSelected: (String selection) {
+            print('You selected: $selection');
+          },
+        ),
       ),
     );
   }
