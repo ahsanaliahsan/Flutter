@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
 
 void main() {
@@ -10,7 +11,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Places Autocomplete with City & Country',
+      title: 'Places Autocomplete with Map',
       home: PlacesAutocompleteScreen(),
     );
   }
@@ -24,20 +25,50 @@ class PlacesAutocompleteScreen extends StatefulWidget {
 
 class _PlacesAutocompleteScreenState extends State<PlacesAutocompleteScreen> {
   final String apiKey =
-      "AIzaSyCg_GnIlgd4l_04zo6_NJ1AYyHucQgcNP0"; // Replace with your actual API key
+      "AIzaSyCg_GnIlgd4l_04zo6_NJ1AYyHucQgcNP0"; // Replace with your API key
   final TextEditingController _controller = TextEditingController();
   String selectedCity = 'Islamabad';
   String selectedCountry = 'Pakistan';
-  List<String> suggestions = [];
   final FocusNode _focusNode = FocusNode();
+  LatLng? selectedLocation;
+  LatLng? cityCoordinates;
+  GoogleMapController? mapController;
 
-  // Predefined cities and countries
   final List<String> cities = ['Islamabad', 'Lahore', 'Rawalpindi', 'Karachi'];
   final List<String> countries = ['Pakistan'];
 
-  Future<List<String>> fetchSuggestions(String input) async {
+  // Fetch coordinates for the selected city
+  Future<void> fetchCityCoordinates(String city) async {
     final String url =
-        "https://maps.googleapis.com/maps/api/place/autocomplete/json?input=$input&key=$apiKey&components=country:pk";
+        "https://maps.googleapis.com/maps/api/geocode/json?address=$city,$selectedCountry&key=$apiKey";
+    final response = await http.get(Uri.parse(url));
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      if (data['results'].isNotEmpty) {
+        final location = data['results'][0]['geometry']['location'];
+        setState(() {
+          cityCoordinates = LatLng(location['lat'], location['lng']);
+        });
+      }
+    } else {
+      print("Error fetching city coordinates: ${response.body}");
+    }
+  }
+
+  // Fetch autocomplete suggestions based on input, city, and country
+  Future<List<String>> fetchSuggestions(String input) async {
+    if (cityCoordinates == null) {
+      await fetchCityCoordinates(selectedCity);
+    }
+
+    final String url =
+        "https://maps.googleapis.com/maps/api/place/autocomplete/json"
+        "?input=$input"
+        "&key=$apiKey"
+        "&components=country:pk"
+        "&location=${cityCoordinates?.latitude},${cityCoordinates?.longitude}"
+        "&radius=50000"; // Bias within 50km radius
 
     final response = await http.get(Uri.parse(url));
 
@@ -45,30 +76,46 @@ class _PlacesAutocompleteScreenState extends State<PlacesAutocompleteScreen> {
       final Map<String, dynamic> data = json.decode(response.body);
       if (data.containsKey('predictions')) {
         return List<String>.from(
-          data['predictions']
-              .where((prediction) =>
-                  prediction['description']
-                      .toString()
-                      .toLowerCase()
-                      .contains(selectedCity.toLowerCase()) &&
-                  prediction['description']
-                      .toString()
-                      .toLowerCase()
-                      .contains(selectedCountry.toLowerCase()))
-              .map((prediction) => prediction['description']),
+          data['predictions'].map((prediction) => prediction['description']),
         );
       }
     } else {
-      print("Error: ${response.statusCode}");
-      print("Response: ${response.body}");
+      print("Error fetching suggestions: ${response.body}");
     }
     return [];
+  }
+
+  Future<void> getPlaceCoordinates(String place) async {
+    final String url =
+        "https://maps.googleapis.com/maps/api/geocode/json?address=$place&key=$apiKey";
+    final response = await http.get(Uri.parse(url));
+
+    if (response.statusCode == 200) {
+      final Map<String, dynamic> data = json.decode(response.body);
+      if (data['results'].isNotEmpty) {
+        final location = data['results'][0]['geometry']['location'];
+        setState(() {
+          selectedLocation = LatLng(location['lat'], location['lng']);
+        });
+        mapController?.animateCamera(
+          CameraUpdate.newLatLngZoom(selectedLocation!, 14),
+        );
+      }
+    } else {
+      print("Error fetching place coordinates: ${response.body}");
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    fetchCityCoordinates(selectedCity); // Fetch initial coordinates
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text("Places Autocomplete")),
+      appBar: AppBar(title: Text("Places Autocomplete with Map")),
       body: Padding(
         padding: const EdgeInsets.all(8.0),
         child: Column(
@@ -89,6 +136,7 @@ class _PlacesAutocompleteScreenState extends State<PlacesAutocompleteScreen> {
               onChanged: (value) {
                 setState(() {
                   selectedCountry = value!;
+                  fetchCityCoordinates(selectedCity);
                 });
               },
             ),
@@ -110,6 +158,7 @@ class _PlacesAutocompleteScreenState extends State<PlacesAutocompleteScreen> {
               onChanged: (value) {
                 setState(() {
                   selectedCity = value!;
+                  fetchCityCoordinates(selectedCity);
                 });
               },
             ),
@@ -123,11 +172,8 @@ class _PlacesAutocompleteScreenState extends State<PlacesAutocompleteScreen> {
                 }
                 return await fetchSuggestions(textEditingValue.text);
               },
-              displayStringForOption: (String option) => option,
-              fieldViewBuilder: (BuildContext context,
-                  TextEditingController textEditingController,
-                  FocusNode focusNode,
-                  VoidCallback onFieldSubmitted) {
+              fieldViewBuilder: (context, textEditingController, focusNode,
+                  onFieldSubmitted) {
                 return TextField(
                   controller: textEditingController,
                   focusNode: focusNode,
@@ -137,35 +183,31 @@ class _PlacesAutocompleteScreenState extends State<PlacesAutocompleteScreen> {
                   ),
                 );
               },
-              optionsViewBuilder: (BuildContext context,
-                  AutocompleteOnSelected<String> onSelected,
-                  Iterable<String> options) {
-                return Align(
-                  alignment: Alignment.topLeft,
-                  child: Material(
-                    elevation: 4,
-                    child: Container(
-                      width: MediaQuery.of(context).size.width - 16,
-                      child: ListView.builder(
-                        padding: EdgeInsets.zero,
-                        itemCount: options.length,
-                        itemBuilder: (BuildContext context, int index) {
-                          final String option = options.elementAt(index);
-                          return ListTile(
-                            title: Text(option),
-                            onTap: () {
-                              onSelected(option);
-                            },
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-                );
-              },
               onSelected: (String selection) {
-                print('You selected: $selection');
+                getPlaceCoordinates(selection);
               },
+            ),
+            SizedBox(height: 10),
+
+            // Google Map Display
+            Expanded(
+              child: GoogleMap(
+                onMapCreated: (GoogleMapController controller) {
+                  mapController = controller;
+                },
+                initialCameraPosition: CameraPosition(
+                  target: cityCoordinates ?? LatLng(33.6844, 73.0479),
+                  zoom: 12,
+                ),
+                markers: selectedLocation != null
+                    ? {
+                        Marker(
+                          markerId: MarkerId('selected-location'),
+                          position: selectedLocation!,
+                        )
+                      }
+                    : {},
+              ),
             ),
           ],
         ),
