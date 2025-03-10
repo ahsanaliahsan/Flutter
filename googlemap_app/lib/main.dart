@@ -241,8 +241,8 @@ class _PlacesAutocompleteScreenState extends State<PlacesAutocompleteScreen> {
                     ),
                   ),
                   Center(
-                    child:
-                        Icon(Icons.location_pin, size: 40, color: Colors.red),
+                    child: Icon(Icons.location_pin,
+                        size: 60, color: Colors.orange),
                   ),
                 ],
               ),
