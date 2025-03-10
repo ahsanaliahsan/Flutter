@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -34,7 +33,6 @@ class _PlacesAutocompleteScreenState extends State<PlacesAutocompleteScreen> {
   LatLng? selectedLocation;
   LatLng? cityCoordinates;
   GoogleMapController? mapController;
-  Timer? _debounce;
 
   final List<String> cities = ['Islamabad', 'Lahore', 'Rawalpindi', 'Karachi'];
   final List<String> countries = ['Pakistan'];
@@ -50,6 +48,9 @@ class _PlacesAutocompleteScreenState extends State<PlacesAutocompleteScreen> {
         final location = data['results'][0]['geometry']['location'];
         setState(() {
           cityCoordinates = LatLng(location['lat'], location['lng']);
+          mapController?.animateCamera(
+            CameraUpdate.newLatLngZoom(cityCoordinates!, 12),
+          );
         });
       }
     }
@@ -66,7 +67,7 @@ class _PlacesAutocompleteScreenState extends State<PlacesAutocompleteScreen> {
         "&key=$apiKey"
         "&components=country:pk"
         "&location=${cityCoordinates?.latitude},${cityCoordinates?.longitude}"
-        "&radius=50000";
+        "&radius=50000"; // Bias within 50km radius
 
     final response = await http.get(Uri.parse(url));
 
@@ -114,19 +115,6 @@ class _PlacesAutocompleteScreenState extends State<PlacesAutocompleteScreen> {
         });
       }
     }
-  }
-
-  void _onCameraIdle(LatLng center) {
-    if (_debounce?.isActive ?? false) _debounce!.cancel();
-    _debounce = Timer(const Duration(milliseconds: 500), () {
-      getAddressFromLatLng(center);
-    });
-  }
-
-  @override
-  void dispose() {
-    _debounce?.cancel();
-    super.dispose();
   }
 
   @override
@@ -216,35 +204,37 @@ class _PlacesAutocompleteScreenState extends State<PlacesAutocompleteScreen> {
             ),
             SizedBox(height: 10),
             Expanded(
-              child: Stack(
-                children: [
-                  GoogleMap(
-                    onMapCreated: (GoogleMapController controller) {
-                      mapController = controller;
-                    },
-                    onCameraIdle: () {
-                      mapController?.getVisibleRegion().then((bounds) {
-                        final center = LatLng(
-                          (bounds.northeast.latitude +
-                                  bounds.southwest.latitude) /
-                              2,
-                          (bounds.northeast.longitude +
-                                  bounds.southwest.longitude) /
-                              2,
-                        );
-                        _onCameraIdle(center);
-                      });
-                    },
-                    initialCameraPosition: CameraPosition(
-                      target: cityCoordinates ?? LatLng(33.6844, 73.0479),
-                      zoom: 12,
-                    ),
-                  ),
-                  Center(
-                    child: Icon(Icons.location_pin,
-                        size: 60, color: Colors.orange),
-                  ),
-                ],
+              child: GoogleMap(
+                onMapCreated: (GoogleMapController controller) {
+                  mapController = controller;
+                },
+                onTap: (LatLng position) {
+                  setState(() {
+                    selectedLocation = position;
+                    _addressController.clear();
+                    getAddressFromLatLng(position);
+                  });
+                },
+                initialCameraPosition: CameraPosition(
+                  target: cityCoordinates ?? LatLng(33.6844, 73.0479),
+                  zoom: 12,
+                ),
+                markers: selectedLocation != null
+                    ? {
+                        Marker(
+                          markerId: MarkerId('selected-location'),
+                          position: selectedLocation!,
+                          draggable: true,
+                          onDragEnd: (LatLng newPosition) {
+                            setState(() {
+                              selectedLocation = newPosition;
+                              _addressController.clear();
+                              getAddressFromLatLng(newPosition);
+                            });
+                          },
+                        )
+                      }
+                    : {},
               ),
             ),
           ],
